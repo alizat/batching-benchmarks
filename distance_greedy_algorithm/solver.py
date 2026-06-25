@@ -33,7 +33,7 @@ def compute_picklists(
 
 
 def find_best_order(
-    remaining_orders: Set[Order],
+    remaining_orders: List[Order],
     selected_items: List[WarehouseItem],
     warehouse_items: Dict[Article, Set[WarehouseItem]],
     instance: Instance,
@@ -64,14 +64,22 @@ def find_best_order(
             total_distance += distance
             add_items_by_zone[item.zone].append(item)
             add_items.add(item)
-        return total_distance / len(add_items), list(add_items)
+        return total_distance / len(add_items), sorted(add_items, key=lambda i: i.id)
 
-    return min((*distance_per_item(order), order) for order in remaining_orders)
+    # `remaining_orders` is iterated in a fixed order (a list, see greedy_solver)
+    # and ties are broken on the average distance deterministically, so the
+    # result does not depend on any set iteration order.
+    return min(
+        ((*distance_per_item(order), order) for order in remaining_orders),
+        key=lambda candidate: candidate[0],
+    )
 
 
 def greedy_solver(instance: Instance, choose_random_order=False) -> List[Batch]:
     item_goal = instance.parameters.min_number_requested_items
-    remaining_orders = set(instance.orders.copy())
+    # A list (not a set) so the iteration/selection order is deterministic
+    # without per-step sorting.
+    remaining_orders = list(instance.orders)
 
     warehouse_article_items: Dict[Article, Set[WarehouseItem]] = defaultdict(set)
     for item in instance.warehouse_items:
@@ -87,17 +95,24 @@ def greedy_solver(instance: Instance, choose_random_order=False) -> List[Batch]:
         logger.info(
             f"Creating a batch, total remaining orders in the pool: {len(remaining_orders)}"
         )
+        # Stop the batch when it is full, the pool is empty, or the (remaining)
+        # item goal has been reached. The last condition matches Algorithm 1 and
+        # keeps the batch from overshooting the item goal.
         while (
             len(remaining_orders) > 0
             and len(batch_orders) < instance.parameters.max_orders_per_batch
+            and len(batch_selected_items) < item_goal
         ):
             # distinguishing between DGA and RDGA
             if choose_random_order:
-                orders = {random.choice(list(remaining_orders))}
+                # pick one order uniformly at random, without replacement; the
+                # caller's random.seed makes this reproducible
+                idx = random.randrange(len(remaining_orders))
+                candidate_orders = [remaining_orders[idx]]
             else:
-                orders = remaining_orders
+                candidate_orders = remaining_orders
             cost, selected_items, selected_order = find_best_order(
-                orders, batch_selected_items, warehouse_article_items, instance
+                candidate_orders, batch_selected_items, warehouse_article_items, instance
             )
             if selected_order is None:
                 break
@@ -105,7 +120,12 @@ def greedy_solver(instance: Instance, choose_random_order=False) -> List[Batch]:
             batch_selected_items.extend(selected_items)
             for item in selected_items:
                 warehouse_article_items[item.article].remove(item)
-            remaining_orders.remove(selected_order)
+            if choose_random_order:
+                # O(1) removal: swap the picked order with the last and pop
+                remaining_orders[idx] = remaining_orders[-1]
+                remaining_orders.pop()
+            else:
+                remaining_orders.remove(selected_order)
 
         batch = Batch(
             batch_orders,
