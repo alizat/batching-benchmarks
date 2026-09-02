@@ -29,9 +29,18 @@ Measured via controlled, same-process, interleaved A/B timing (original arithmet
 |---|---:|---:|
 | small-0 | 500 | ~18-20% faster |
 | medium-0 | 5,000 | ~23-33% faster |
-| large-0 | 50,000 | *TBD -- pending a full run* |
+| large-0 | 50,000 | ~16-19% faster |
 
 The total picking distance (objective value) is unaffected by this change -- the matrix only changes lookup speed, not the values `distance()` returns.
+
+`large-0` was additionally run to full completion end-to-end (not a bounded/extrapolated sample) with each variant, confirming both the speedup and the correctness of the matrix at full scale:
+
+| Variant | Wall time | Objective value | Picklists | Feasible |
+|---|---:|---:|---:|---|
+| Original arithmetic | 16,419s (4h 33m) | 605,888 | 10,882 | yes |
+| Distance matrix | 13,811s (3h 50m) | 605,888 | 10,882 | yes |
+
+Both variants produced an identical objective value and identical batch/picklist/item counts, as expected since the matrix only memoizes the same distance formula -- the matrix run finished ~2,608s (~43 min) faster.
 
 ## Contributing
 
