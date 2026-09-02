@@ -3,6 +3,8 @@ import math
 from typing import List
 import logging
 
+import numpy as np
+
 logger = logging.getLogger(__name__)
 
 
@@ -116,6 +118,7 @@ class Instance:
             path = self.id
         with open(f"{path}/parameters.json", "r") as file:
             self.parameters = Parameters(**json.load(file))
+        self.build_distance_matrix()
 
         with open(f"{path}/articles.json", "r") as file:
             self.articles = [Article(**a) for a in json.load(file)]
@@ -190,10 +193,65 @@ class Instance:
         else:
             return min(middle_distance, 2 * self.parameters.last_row - middle_distance)
 
+    def location_index(self, row: int, aisle: int) -> int:
+        # Translates a (row, aisle) warehouse location into its flat index in
+        # `distance_matrix`. Locations are laid out row-major, so all aisles
+        # of one row occupy `nbr_aisles` consecutive indices.
+        return (row - self.first_row) * self.nbr_aisles + (aisle - self.first_aisle)
+
+    def build_distance_matrix(self) -> None:
+        # Precomputes a location x location distance matrix covering every
+        # (row, aisle) combination allowed by `parameters`. All zones share
+        # the same row/aisle extent, so this single matrix is reused for
+        # every zone instead of building one per zone.
+        self.first_row = self.parameters.first_row
+        self.first_aisle = self.parameters.first_aisle
+        rows = list(range(self.first_row, self.parameters.last_row + 1))
+        aisles = list(range(self.first_aisle, self.parameters.last_aisle + 1))
+        self.nbr_aisles = len(aisles)
+        self.nbr_locations = len(rows) * len(aisles)
+
+        # Small (nbr_rows x nbr_rows / nbr_aisles x nbr_aisles) pairwise
+        # matrices, built with the scalar formulas above so there remains a
+        # single source of truth for the metric -- cheap even as plain
+        # Python loops (~10k calls each for a 100x100 warehouse).
+        row_dist = np.array(
+            [[self.row_distance(u, v) for v in rows] for u in rows], dtype=np.int32
+        )
+        aisle_dist = np.array(
+            [[self.aisle_distance(u, v) for v in aisles] for u in aisles], dtype=np.int32
+        )
+
+        # Full location-to-location matrix: full[r1,a1,r2,a2] =
+        # row_dist[r1,r2] + aisle_dist[a1,a2], flattened row-major to match
+        # location_index. This is the O((nbr_rows*nbr_aisles)^2) step, so it
+        # stays vectorized in numpy rather than a Python double loop. The
+        # result is then flattened into a plain Python list: `distance()` is
+        # called millions of times per solve with one pair at a time, and a
+        # flat list index beats numpy's per-call scalar-indexing overhead by
+        # a wide margin at that call volume (see distance() below).
+        n = self.nbr_locations
+        combined = row_dist[:, None, :, None] + aisle_dist[None, :, None, :]
+        self.distance_matrix = combined.reshape(n * n).astype(np.int16).tolist()
+
+        logger.info(
+            f"Built {n}x{n} location distance matrix "
+            f"({n * n * 2 / 1e6:.1f} MB as int16)"
+        )
+
     def distance(self, u: WarehouseItem, v: WarehouseItem):
         if u.zone != v.zone:
             return math.inf
-        return self.row_distance(u.row, v.row) + self.aisle_distance(u.aisle, v.aisle)
+        # Inlines location_index() for both endpoints rather than calling it:
+        # distance() runs in the innermost loop of the solver (millions of
+        # calls per solve), where the extra Python function-call/attribute
+        # overhead of two method calls measurably outweighs the few extra
+        # arithmetic ops -- keep this in sync with location_index() above.
+        first_row, first_aisle = self.first_row, self.first_aisle
+        nbr_aisles, n = self.nbr_aisles, self.nbr_locations
+        i = (u.row - first_row) * nbr_aisles + (u.aisle - first_aisle)
+        j = (v.row - first_row) * nbr_aisles + (v.aisle - first_aisle)
+        return self.distance_matrix[i * n + j]
 
     def picklist_cost(self, picklist: List[WarehouseItem]) -> int:
         if len(picklist) == 0:
