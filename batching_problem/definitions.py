@@ -100,8 +100,13 @@ class Instance:
     batches: List[Batch]
     stats: dict
 
-    def __init__(self) -> None:
+    def __init__(self, use_distance_matrix: bool = False) -> None:
         self.batches = []
+        # When True, distance() looks up the precomputed location distance
+        # matrix (see build_distance_matrix); when False (default), it
+        # recomputes row_distance + aisle_distance per call, as in the
+        # original implementation.
+        self.use_distance_matrix = use_distance_matrix
 
     def write(self, directory):
         for object in ["articles", "warehouse_items", "orders", "parameters"]:
@@ -118,7 +123,8 @@ class Instance:
             path = self.id
         with open(f"{path}/parameters.json", "r") as file:
             self.parameters = Parameters(**json.load(file))
-        self.build_distance_matrix()
+        if self.use_distance_matrix:
+            self.build_distance_matrix()
 
         with open(f"{path}/articles.json", "r") as file:
             self.articles = [Article(**a) for a in json.load(file)]
@@ -242,6 +248,9 @@ class Instance:
     def distance(self, u: WarehouseItem, v: WarehouseItem):
         if u.zone != v.zone:
             return math.inf
+        if not self.use_distance_matrix:
+            # Original implementation: recompute the metric from scratch.
+            return self.row_distance(u.row, v.row) + self.aisle_distance(u.aisle, v.aisle)
         # Inlines location_index() for both endpoints rather than calling it:
         # distance() runs in the innermost loop of the solver (millions of
         # calls per solve), where the extra Python function-call/attribute
