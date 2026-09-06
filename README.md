@@ -31,26 +31,30 @@ Measured via `python solve_instances.py -a rdga -k <K>` with the *original* per-
 
 **medium-0** (5,000 orders, item goal 2,659):
 
-| Algorithm | Avg. time | Avg. # picklist items | Avg. # picklists | Avg. objective (total distance) |
-|---|---:|---:|---:|---:|
-| dga | 176s | 2,659 | 825 | 65,410 |
-| rdga, k=500 | 25.2s | 2,659.5 | 872.2 | 68,828.4 |
-| rdga, k=50 | 2.1s | 2,659.9 | 925.0 | 79,819.4 |
-| rdga, k=1 | 0.13s | 2,660.0 | 907.0 | 138,374.0 |
+| Algorithm | Avg. time | Avg. # picklists | Avg. objective (total distance) |
+|---|---:|---:|---:|
+| dga         | 176s  | 825   | 65,410    |
+| rdga, k=500 | 25.2s | 872.2 | 68,828.4  |
+| rdga, k=50  | 2.1s  | 925.0 | 79,819.4  |
+| rdga, k=1   | 0.13s | 907.0 | 138,374.0 |
 
 **large-0** (50,000 orders, item goal 26,349):
 
-| Algorithm | Avg. time | Avg. # picklist items | Avg. # picklists | Avg. objective (total distance) |
-|---|---:|---:|---:|---:|
-| dga | 16,419s (4h 33m) | 26,351 | 10,882 | 605,888 |
-| rdga, k=500 | 193.1s (3m 13s) | 26,349.7 | 12,135.2 | 713,235.2 |
-| rdga, k=50 | 26.3s | 26,349.4 | 13,706.2 | 857,581.6 |
-| rdga, k=1 | 1.5s | 26,349.7 | 14,150.9 | 1,490,776.8 |
+| Algorithm | Avg. time | Avg. # picklists | Avg. objective (total distance) |
+|---|---:|---:|---:|
+| dga          | 16,419s (4h 33m) | 10,882   | 605,888     |
+| rdga, k=5000 | 1,814.2s (~30m)  | 11,216.4 | 627,581.2   |
+| rdga, k=500  | 193.1s (3m 13s)  | 12,135.2 | 713,235.2   |
+| rdga, k=50   | 26.3s            | 13,706.2 | 857,581.6   |
+| rdga, k=1    | 1.5s             | 14,150.9 | 1,490,776.8 |
 
 Observations:
-- Quality improves and runtime grows monotonically with `k` on both instances, converging toward DGA's result: on `medium-0`, `k=500` lands within ~5.2% of DGA's objective while running ~7x faster than DGA; on `large-0`, `k=500` lands within ~17.7% of DGA's objective while running ~85x faster.
+- Quality improves and runtime grows monotonically with `k` on both instances, converging toward DGA's result:
+   - on `medium-0`, `k=500` (10% of its order pool) lands within ~5.2% of DGA's objective while running ~7x faster than DGA
+   - on `large-0`, `k=5000` (10% of its order pool) lands within ~3.6% of DGA's objective while running ~9x faster.
+- From RDGA run on `large-0`, runtime appears to scale almost exactly linearly with `k` (e.g., `k=500`->`k=5000` is a 10x increase in `k` for a ~9x increase in runtime).
 - The gap to DGA at a fixed `k` widens as the order pool grows, since a fixed sample size covers a shrinking fraction of a bigger pool (`k=500` is 10% of `medium-0`'s 5,000-order pool but only 1% of `large-0`'s 50,000-order pool).
-- All 60 runs (2 instances x 3 `k` values x 10 seeds) are feasible (`Instance.check_feasibility()` passes) and land at or very near the requested item goal. Variance across seeds is fairly tight at every `k` (e.g. `large-0`'s `k=500` objective ranges 711,150-715,970 across seeds); picklist counts shrink toward DGA's as `k` grows, reflecting better order sequencing at higher `k`.
+- All 70 runs (2 instances x `k` in {1, 50, 500} plus `large-0`'s `k=5000`, x 10 seeds) are feasible (`Instance.check_feasibility()` passes). Variance across seeds is fairly tight at every `k` (e.g. `large-0`'s `k=500` objective ranges 711,150-715,970 across seeds, `k=5000` ranges 625,020-630,034); picklist counts shrink toward DGA's as `k` grows, reflecting better order sequencing at higher `k`.
 
 ### 2. Precomputed location distance matrix (`-distmatrix`)
 
@@ -70,29 +74,30 @@ Applied to every experiment in the RDGA section above, `-distmatrix` gives:
 
 | Instance | Orders | Speedup |
 |---|---:|---:|
-| small-0 | 500 | ~18-20% faster |
-| medium-0 | 5,000 | ~23-33% faster |
-| large-0 | 50,000 | ~16-19% faster |
+| small-0  | 500    | ~18-20% faster |
+| medium-0 | 5,000  | ~23-33% faster |
+| large-0  | 50,000 | ~16-19% faster |
 
 **RDGA** (10-seed averages, both instances, `k`=1/50/500):
 
 | Instance | k | Avg. time, original arithmetic | Avg. time, distance matrix | Speedup |
 |---|---:|---:|---:|---:|
-| medium-0 | 50 | 2.11s | 1.75s | 1.2x |
-| medium-0 | 500 | 25.2s | 14.9s | 1.7x |
-| large-0 | 50 | 26.3s | 15.5s | 1.7x |
-| large-0 | 500 | 193.1s | 142.1s | 1.4x |
+| medium-0 | 50   | 2.11s           | 1.75s           | 1.2x  |
+| medium-0 | 500  | 25.2s           | 14.9s           | 1.7x  |
+| large-0  | 50   | 26.3s           | 15.5s           | 1.7x  |
+| large-0  | 500  | 193.1s          | 142.1s          | 1.4x  |
+| large-0  | 5000 | 1,814.2s (~30m) | 1,448.6s (~24m) | 1.25x |
 
 (`k=1` is omitted here -- its running time is too small either way, sub-second to ~1.5s, for a meaningful speedup measurement.)
 
 The total picking distance (objective value) is unaffected by this change at any `k` -- the matrix only changes lookup speed, not the values `distance()` returns; every DGA and RDGA run above produced identical objective/picklist/item counts with and without `-distmatrix`.
 
-`large-0`'s DGA was additionally run to full completion end-to-end (not a bounded/extrapolated sample) with each variant, confirming both the speedup and the correctness of the matrix at full scale:
+`large-0`'s DGA was additionally run to full completion with each variant, confirming both the speedup and the correctness of the matrix at full scale:
 
 | Variant | Wall time | Objective value | Picklists | Feasible |
 |---|---:|---:|---:|---|
 | Original arithmetic | 16,419s (4h 33m) | 605,888 | 10,882 | yes |
-| Distance matrix | 13,811s (3h 50m) | 605,888 | 10,882 | yes |
+| Distance matrix     | 13,811s (3h 50m) | 605,888 | 10,882 | yes |
 
 Both variants produced an identical objective value and identical batch/picklist/item counts, as expected since the matrix only memoizes the same distance formula -- the matrix run finished ~2,608s (~43 min) faster.
 
