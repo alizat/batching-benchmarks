@@ -8,20 +8,23 @@ logger = logging.getLogger(__name__)
 
 class InstanceEncoder(json.JSONEncoder):
     def default(self, o):
-        if type(o) == WarehouseItem:
-            ret = o.__dict__
-            ret["article"] = o.article.id
-            return ret
-        elif type(o) == Order:
-            ret = o.__dict__
-            ret["positions"] = [pos.id for pos in o.positions]
-            return ret
-        elif type(o) == Batch:
-            ret = o.__dict__
-            ret["picklists"] = [
-                [item.id for item in picklist] for picklist in o.picklists
-            ]
-            ret["orders"] = [order.id for order in o.orders]
+        # Every branch returns a new dict: writing the replacements into
+        # o.__dict__ would replace the objects on the instance with their ids.
+        if isinstance(o, WarehouseItem):
+            return {**o.__dict__, "article": o.article.id}
+        elif isinstance(o, Order):
+            return {
+                **o.__dict__,
+                "positions": [position.id for position in o.positions],
+            }
+        elif isinstance(o, Batch):
+            return {
+                **o.__dict__,
+                "picklists": [
+                    [item.id for item in picklist] for picklist in o.picklists
+                ],
+                "orders": [order.id for order in o.orders],
+            }
         return o.__dict__
 
 
@@ -144,6 +147,27 @@ class Instance:
             < self.parameters.min_number_requested_items
         ):
             logger.warning("Fewer items than requested")
+            return False
+
+        picked_item_ids = [
+            item.id
+            for batch in self.batches
+            for picklist in batch.picklists
+            for item in picklist
+        ]
+        if len(picked_item_ids) != len(set(picked_item_ids)):
+            logger.warning("a warehouse item is picked more than once!")
+            return False
+
+        if not set(picked_item_ids) <= {item.id for item in self.warehouse_items}:
+            logger.warning("a picked item does not exist in the warehouse!")
+            return False
+
+        batched_order_ids = [
+            order.id for batch in self.batches for order in batch.orders
+        ]
+        if len(batched_order_ids) != len(set(batched_order_ids)):
+            logger.warning("an order is assigned to more than one batch!")
             return False
 
         for batch in self.batches:
