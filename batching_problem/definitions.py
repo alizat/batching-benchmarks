@@ -193,6 +193,10 @@ class Instance:
     def distance(self, u: WarehouseItem, v: WarehouseItem):
         if u.zone != v.zone:
             return math.inf
+        # Two items in one aisle are reached without entering a cross-aisle, so
+        # the row/aisle decomposition below does not apply to them.
+        if u.aisle == v.aisle:
+            return abs(u.row - v.row)
         return self.row_distance(u.row, v.row) + self.aisle_distance(u.aisle, v.aisle)
 
     def picklist_cost(self, picklist: List[WarehouseItem]) -> int:
