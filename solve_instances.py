@@ -18,14 +18,16 @@ logger = logging.getLogger(__name__)
 def run(args, name) -> None:
     path = f"{args.dir}/{name}"
     logger.info(f"Running algorithm for {name} instance")
-    start_time = time.time()
     logger.info("Reading instance")
     instance = Instance()
     instance.read(path)
     logger.info("Creating batches")
+    # Reading a large instance takes seconds, which is most of a randomized run.
+    # Time the algorithm itself so the two algorithms stay comparable.
+    start_time = time.time()
     instance.batches = greedy_solver(instance, choose_random_order=args.algo == "rdga")
+    time_elapsed = round(time.time() - start_time, 3)
     logger.info("batches created")
-    time_elapsed = round(time.time() - start_time)
     logger.info("Evaluating results")
     instance.evaluate(time_elapsed)
     logger.info("writing results")
