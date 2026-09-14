@@ -1,3 +1,4 @@
+import os
 import random
 import time
 import logging
@@ -31,8 +32,10 @@ def run(args, name) -> None:
     logger.info("Evaluating results")
     instance.evaluate(time_elapsed)
     logger.info("writing results")
-    instance.store_result(path)
-    logger.info(f"Results for {name} computed and stored.")
+    result_path = f"{path}/{args.algo}"
+    os.makedirs(result_path, exist_ok=True)
+    instance.store_result(result_path)
+    logger.info(f"Results for {name} computed and stored in {result_path}.")
 
 
 if __name__ == "__main__":
