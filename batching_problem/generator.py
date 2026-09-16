@@ -79,16 +79,16 @@ def generate_orders(dist, instance, nbr_com_items_distribution, nbr_orders):
     for i in range(nbr_orders):
         # we need to ensure at least 2 positions for each order
         cutoff = min(
-            max(dist.values()), len(available_items) - 2 * (nbr_orders - i - 1)
+            max(dist.keys()), len(available_items) - 2 * (nbr_orders - i - 1)
         )
         nbr_positions = min(cutoff, nbr_com_items_distribution())
 
-        orders = []
+        positions = []
         for _ in range(nbr_positions):
             item = available_items.pop()
-            orders.append(item.article)
+            positions.append(item.article)
 
-        instance.orders.append(Order(f"order-{i}", orders))
+        instance.orders.append(Order(f"order-{i}", positions))
 
 
 def generate_items(aisles, instance, nbr_articles, nbr_warehouse_items, rows, zones):

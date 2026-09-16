@@ -20,13 +20,15 @@ def compute_picklists(
         picklist = []
         cur_volume = 0
         for item in sorted(items_by_zone[zone], key=lambda i: (i.aisle, i.row)):
-            if cur_volume + item.article.volume <= max_container_volume:
-                picklist.append(item)
-                cur_volume += item.article.volume
-            else:
+            # Only close the current picklist if it holds something. An item
+            # bigger than the container would otherwise open and immediately
+            # close an empty one.
+            if picklist and cur_volume + item.article.volume > max_container_volume:
                 picklists.append(picklist)
-                picklist = [item]
-                cur_volume = item.article.volume
+                picklist = []
+                cur_volume = 0
+            picklist.append(item)
+            cur_volume += item.article.volume
         if len(picklist) > 0:
             picklists.append(picklist)
     return picklists
@@ -45,10 +47,20 @@ def find_best_order(
         selected_items_by_zone[i.zone].append(i)
 
     def distance_per_item(order: Order) -> (float, List[WarehouseItem]):
+        if len(order.positions) == 0:
+            raise ValueError(f"order {order.id} requests no articles")
         total_distance = 0
         add_items = set()
         add_items_by_zone = defaultdict(list)
         for article in order.positions:
+            candidates = [
+                item for item in warehouse_items[article] if item not in add_items
+            ]
+            if len(candidates) == 0:
+                raise ValueError(
+                    f"no warehouse item left for article {article.id} "
+                    f"requested by order {order.id}"
+                )
             distance, item = min(
                 (
                     min(
@@ -58,8 +70,7 @@ def find_best_order(
                     ),
                     item1,
                 )
-                for item1 in warehouse_items[article]
-                if item1 not in add_items
+                for item1 in candidates
             )
             total_distance += distance
             add_items_by_zone[item.zone].append(item)
@@ -114,8 +125,6 @@ def greedy_solver(instance: Instance, choose_random_order=False) -> List[Batch]:
             cost, selected_items, selected_order = find_best_order(
                 candidate_orders, batch_selected_items, warehouse_article_items, instance
             )
-            if selected_order is None:
-                break
             batch_orders.append(selected_order)
             batch_selected_items.extend(selected_items)
             for item in selected_items:
