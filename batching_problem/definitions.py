@@ -10,20 +10,23 @@ logger = logging.getLogger(__name__)
 
 class InstanceEncoder(json.JSONEncoder):
     def default(self, o):
-        if type(o) == WarehouseItem:
-            ret = o.__dict__
-            ret["article"] = o.article.id
-            return ret
-        elif type(o) == Order:
-            ret = o.__dict__
-            ret["positions"] = [pos.id for pos in o.positions]
-            return ret
-        elif type(o) == Batch:
-            ret = o.__dict__
-            ret["picklists"] = [
-                [item.id for item in picklist] for picklist in o.picklists
-            ]
-            ret["orders"] = [order.id for order in o.orders]
+        # Every branch returns a new dict: writing the replacements into
+        # o.__dict__ would replace the objects on the instance with their ids.
+        if isinstance(o, WarehouseItem):
+            return {**o.__dict__, "article": o.article.id}
+        elif isinstance(o, Order):
+            return {
+                **o.__dict__,
+                "positions": [position.id for position in o.positions],
+            }
+        elif isinstance(o, Batch):
+            return {
+                **o.__dict__,
+                "picklists": [
+                    [item.id for item in picklist] for picklist in o.picklists
+                ],
+                "orders": [order.id for order in o.orders],
+            }
         return o.__dict__
 
 
@@ -155,6 +158,27 @@ class Instance:
             logger.warning("Fewer items than requested")
             return False
 
+        picked_item_ids = [
+            item.id
+            for batch in self.batches
+            for picklist in batch.picklists
+            for item in picklist
+        ]
+        if len(picked_item_ids) != len(set(picked_item_ids)):
+            logger.warning("a warehouse item is picked more than once!")
+            return False
+
+        if not set(picked_item_ids) <= {item.id for item in self.warehouse_items}:
+            logger.warning("a picked item does not exist in the warehouse!")
+            return False
+
+        batched_order_ids = [
+            order.id for batch in self.batches for order in batch.orders
+        ]
+        if len(batched_order_ids) != len(set(batched_order_ids)):
+            logger.warning("an order is assigned to more than one batch!")
+            return False
+
         for batch in self.batches:
             if len(batch.orders) > self.parameters.max_orders_per_batch:
                 logger.warning("Batch exceeds max commissions limit!")
@@ -238,6 +262,17 @@ class Instance:
         # a wide margin at that call volume (see distance() below).
         n = self.nbr_locations
         combined = row_dist[:, None, :, None] + aisle_dist[None, :, None, :]
+
+        # Same-aisle pairs walk straight along the aisle, without the
+        # cross-aisle wraparound row_dist accounts for (see distance()'s
+        # same-aisle branch) -- patch those diagonal-in-aisle slices so the
+        # matrix stays consistent with the non-matrix formula.
+        straight_row_dist = np.abs(
+            np.array(rows)[:, None] - np.array(rows)[None, :]
+        ).astype(np.int32)
+        for a in range(len(aisles)):
+            combined[:, a, :, a] = straight_row_dist
+
         self.distance_matrix = combined.reshape(n * n).astype(np.int16).tolist()
 
         logger.info(
@@ -249,13 +284,18 @@ class Instance:
         if u.zone != v.zone:
             return math.inf
         if not self.use_distance_matrix:
-            # Original implementation: recompute the metric from scratch.
+            # Two items in one aisle are reached without entering a cross-aisle, so
+            # the row/aisle decomposition below does not apply to them.
+            if u.aisle == v.aisle:
+                return abs(u.row - v.row)
             return self.row_distance(u.row, v.row) + self.aisle_distance(u.aisle, v.aisle)
         # Inlines location_index() for both endpoints rather than calling it:
         # distance() runs in the innermost loop of the solver (millions of
         # calls per solve), where the extra Python function-call/attribute
         # overhead of two method calls measurably outweighs the few extra
         # arithmetic ops -- keep this in sync with location_index() above.
+        # The same-aisle special case above is baked into distance_matrix
+        # itself (see build_distance_matrix), so no extra check is needed here.
         first_row, first_aisle = self.first_row, self.first_aisle
         nbr_aisles, n = self.nbr_aisles, self.nbr_locations
         i = (u.row - first_row) * nbr_aisles + (u.aisle - first_aisle)

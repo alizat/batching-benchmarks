@@ -1,3 +1,4 @@
+import os
 import random
 import time
 import logging
@@ -18,7 +19,6 @@ logger = logging.getLogger(__name__)
 def run(args, name) -> None:
     path = f"{args.dir}/{name}"
     logger.info(f"Running algorithm for {name} instance")
-    start_time = time.time()
     logger.info(
         f"Reading instance (distance calculation: "
         f"{'precomputed matrix' if args.distmatrix else 'original arithmetic'})"
@@ -26,15 +26,20 @@ def run(args, name) -> None:
     instance = Instance(use_distance_matrix=args.distmatrix)
     instance.read(path)
     logger.info("Creating batches")
+    # Reading a large instance takes seconds, which is most of a randomized run.
+    # Time the algorithm itself so the two algorithms stay comparable.
+    start_time = time.time()
     k = args.k if args.algo == "rdga" else None
     instance.batches = greedy_solver(instance, k=k)
+    time_elapsed = round(time.time() - start_time, 3)
     logger.info("batches created")
-    time_elapsed = round(time.time() - start_time)
     logger.info("Evaluating results")
     instance.evaluate(time_elapsed)
     logger.info("writing results")
-    instance.store_result(path)
-    logger.info(f"Results for {name} computed and stored.")
+    result_path = f"{path}/{args.algo}"
+    os.makedirs(result_path, exist_ok=True)
+    instance.store_result(result_path)
+    logger.info(f"Results for {name} computed and stored in {result_path}.")
 
 
 if __name__ == "__main__":
