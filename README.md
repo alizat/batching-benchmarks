@@ -53,6 +53,7 @@ Measured via `python solve_instances.py -a rdga --random-sample-size <N>` on the
 Observations:
 - Quality improves and runtime grows with the sample size on both instances, converging toward DGA's result:
    - on `medium-0`, sample size 500 (10% of its order pool) lands within ~5.7% of DGA's objective while running ~11x faster than DGA
+   - on `large-0`, sample size 500 (1% of its order pool) lands within ~27.7% of DGA's objective while running ~95x faster
    - on `large-0`, sample size 5000 (10% of its order pool) lands within ~6.0% of DGA's objective while running ~9x faster.
 - On `large-0`, runtime scales roughly linearly with the sample size (500->5000 is a 10x increase in sample size for a ~10.6x increase in runtime).
 - The gap to DGA at a fixed sample size widens as the order pool grows, since a fixed sample size covers a shrinking fraction of a bigger pool (sample size 500 is 10% of `medium-0`'s 5,000-order pool but only 1% of `large-0`'s 50,000-order pool: ~5.7% vs ~27.7% above DGA).
