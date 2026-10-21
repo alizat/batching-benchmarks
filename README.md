@@ -8,7 +8,7 @@ The instances used to create results in the paper are stored in `instances.zip`.
 1. Clone this project and copy the files into your own project
 2. Generate batching instances via `python generate_instances.py` (any Python 3.6+ works). For each generated instance (per default in the `instances` folder) four files will be created: `{articles, orders, parameters, warehouse_items}.json`. 
 3. Run the Distance Greedy Algorithm (DGA) via `python solve_instances.py`. Two files will be stored per instance under `instances/<instance>/dga/`: `batches.json` and `statistics.json`. The runtime in `statistics.json` covers the algorithm only, not reading the instance from disk.
-4. Run the Randomized DGA via `python solve_instances.py -a rdga`, which writes to `instances/<instance>/rdga/`, optionally with `-k <N>` (default `1`) to sample `N` random orders per step and take the best of them, e.g. `python solve_instances.py -a rdga -k 50`.
+4. Run the Randomized DGA via `python solve_instances.py -a rdga`, which writes to `instances/<instance>/rdga/`. Optionally add `-k <N>` (default `1`) to sample `N` random orders per step and take the best of them, e.g. `python solve_instances.py -a rdga -k 50`.
 5. Write your own solver to outperform these baseline algorithms :)
 
 Run the tests with `python -m unittest discover`.
@@ -62,7 +62,7 @@ Observations:
 
 A **precomputed location distance matrix** speeds up `Instance.distance()` in `batching_problem/definitions.py`:
 
-- Every `(row, aisle)` warehouse location allowed by an instance's `parameters` is enumerated once per instance (a 101x101 grid = 10,201 locations for the generator's default 100x100 warehouse), and a full location-to-location distance matrix (10,201 x 10,201) is precomputed by `Instance.build_distance_matrix()`, called once when an instance is read via `Instance.read()`.
+- Every `(row, aisle)` warehouse location allowed by an instance's `parameters` is enumerated once per instance (a 101x101 grid = 10,201 locations for the generator's default 100x100 warehouse), and a full location-to-location distance matrix (10,201 x 10,201) is precomputed by `Instance.build_distance_matrix()`, called once by `Instance.read()` when the instance is created with `use_distance_matrix=True` (which is what `-distmatrix` sets; see below).
 - `Instance.location_index(row, aisle)` translates any `(row, aisle)` location into its flat index into that matrix.
 - `Instance.distance(u, v)` now looks up this precomputed matrix instead of recomputing `row_distance` + `aisle_distance` from scratch for every pair of items. Since all zones share the same row/aisle extent, a single matrix is reused across every zone rather than building one per zone.
 - The matrix is stored as a flat Python list rather than a numpy array: profiling showed numpy's per-call scalar-indexing overhead exceeds the cost of a plain list index at the call volumes this solver produces (millions of `distance()` calls per solve), so a flat list measured faster despite numpy being used to build the matrix itself.
