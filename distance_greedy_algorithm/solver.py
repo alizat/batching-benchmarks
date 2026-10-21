@@ -86,11 +86,12 @@ def find_best_order(
     )
 
 
-def greedy_solver(instance: Instance, k: int = None) -> List[Batch]:
-    # k=None: DGA -- every remaining order is a candidate at each step (the
-    # deterministic, full scan). k=int: RDGA -- at each step, sample k orders
-    # uniformly at random (without replacement) from the remaining pool and
-    # take the best of that sample; k=1 is the original RDGA behaviour.
+def greedy_solver(instance: Instance, random_sample_size: int = None) -> List[Batch]:
+    # random_sample_size=None: DGA -- every remaining order is a candidate at
+    # each step (the deterministic, full scan). random_sample_size=int: RDGA --
+    # at each step, sample that many orders uniformly at random (without
+    # replacement) from the remaining pool and take the best of that sample;
+    # random_sample_size=1 is the original RDGA behaviour.
     item_goal = instance.parameters.min_number_requested_items
     # A list (not a set) so the iteration/selection order is deterministic
     # without per-step sorting.
@@ -119,11 +120,13 @@ def greedy_solver(instance: Instance, k: int = None) -> List[Batch]:
             and len(batch_selected_items) < item_goal
         ):
             # distinguishing between DGA and RDGA
-            if k is not None:
-                # sample min(k, pool size) orders uniformly at random, without
-                # replacement; the caller's random.seed makes this reproducible
+            if random_sample_size is not None:
+                # sample min(random_sample_size, pool size) orders uniformly at
+                # random, without replacement; the caller's random.seed makes
+                # this reproducible
                 sample_idxs = random.sample(
-                    range(len(remaining_orders)), min(k, len(remaining_orders))
+                    range(len(remaining_orders)),
+                    min(random_sample_size, len(remaining_orders)),
                 )
                 candidate_orders = [remaining_orders[i] for i in sample_idxs]
             else:
@@ -135,7 +138,7 @@ def greedy_solver(instance: Instance, k: int = None) -> List[Batch]:
             batch_selected_items.extend(selected_items)
             for item in selected_items:
                 warehouse_article_items[item.article].remove(item)
-            if k is not None:
+            if random_sample_size is not None:
                 # O(1) removal: swap the picked order with the last and pop.
                 # The picked order's position within remaining_orders is
                 # sample_idxs[i], where i is its position among the sampled
